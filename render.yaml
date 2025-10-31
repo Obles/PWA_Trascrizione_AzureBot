@@ -1,0 +1,45 @@
+# =========================================================
+# 🌐 Render Deployment Configuration
+# File: render.yaml
+# Progetto: PWA_Trascrizione (TrascrizioneVocale-CloudRender)
+# Autore: Massimo Signoretto
+# Descrizione:
+#   App PWA multipiattaforma per registrazione vocale e trascrizione automatica
+#   tramite API OpenAI + invio email SMTP integrato.
+# =========================================================
+
+services:
+  - type: web
+    name: pwa-trascrizione
+    env: node
+    plan: free
+    region: frankfurt
+
+    buildCommand: |
+      npm install
+
+    startCommand: |
+      node serverMail.js
+
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_TO
+        sync: false
+
+    autoDeploy: true
+
+    routes:
+      - type: rewrite
+        source: /.*
+        destination: /index.html
