@@ -1,0 +1,6 @@
+# Escludi file sensibili e inutili al deploy
+.env
+/uploads/
+node_modules/
+.DS_Store
+npm-debug.log
