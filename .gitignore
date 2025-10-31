@@ -1,6 +1,15 @@
-# Escludi file sensibili e inutili al deploy
+# 🔒 Escludi file sensibili e inutili al deploy
 .env
 /uploads/
 node_modules/
 .DS_Store
 npm-debug.log
+
+# 🧩 File temporanei VSCode
+.vscode/
+*.log
+
+# 🧰 Backup o vecchie versioni
+*.bak
+*.old
+*.tmp
