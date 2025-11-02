@@ -54,3 +54,13 @@
 ### 1️⃣ Installa le dipendenze
 ```bash
 npm install
+# 1. Installa Node.js LTS (se manca)
+winget install OpenJS.NodeJS.LTS
+
+# 2. Installa Git
+winget install Git.Git
+
+# 3. Verifica installazioni
+node -v
+npm -v
+git --version
