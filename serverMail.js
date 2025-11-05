@@ -35,6 +35,10 @@ transporter.verify(function (error, success) {
   }
 });
 
+app.get("/", (req, res) => {
+  res.send("✅ Server attivo e pronto per /trascrivi");
+});
+
 app.post("/trascrivi", upload.single("file"), async (req, res) => {
   console.log("🎧 File ricevuto:", req.file?.originalname, req.file?.mimetype, req.file?.size, "byte");
 
