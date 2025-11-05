@@ -122,6 +122,11 @@ app.post("/trascrivi", upload.single("file"), async (req, res) => {
   }
 });
 
-app.listen(3000, () =>
-  console.log("✅ Server con email avviato su http://localhost:3000")
-);
+// app.listen(3000, () =>
+//   console.log("✅ Server con email avviato su http://localhost:3000")
+// );
+const port = process.env.PORT || 3000;
+
+app.listen(port, '0.0.0.0', () => {
+  console.log(`✅ Server avviato su http://localhost:${port} (PORT=${port})`);
+});
