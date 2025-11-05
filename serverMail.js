@@ -12,6 +12,7 @@ dotenv.config();
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
+app.use(express.static("."));
 const upload = multer({ dest: "uploads/" });
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 

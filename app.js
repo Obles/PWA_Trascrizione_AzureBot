@@ -54,7 +54,8 @@ recordBtn.onclick = async () => {
 
       try {
         logToScreen("📤 Invio al server...");
-        const resp = await fetch("http://localhost:3000/trascrivi", {
+        //const resp = await fetch("http://localhost:3000/trascrivi", {
+        const resp = await fetch("/trascrivi", {
           method: "POST",
           body: formData
         });
