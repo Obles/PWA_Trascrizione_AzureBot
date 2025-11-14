@@ -23,15 +23,31 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
 
-//app.use(cors());
-
+// ✅ Abilita CORS solo per ambiente locale (dev)
 app.use(cors({
   origin: ["http://127.0.0.1:5500", "http://localhost:5500"],
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-app.use(express.static("."));
+// 🧭 Gestione percorsi e servizio dei file statici
+import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+// 🟢 Servizio dei file statici (frontend)
+app.use(express.static(path.join(__dirname, "public")));
+
+// 🚫 Disabilita cache e forza connessione persistente
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Connection", "keep-alive");
+  next();
+});
+
+
+
 const upload = multer({ dest: "uploads/" });
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -113,7 +129,6 @@ smtpTransporter.verify(err =>
 /* ========================================================================================
    🔹 ENDPOINT PRINCIPALE
    ======================================================================================== */
-app.get("/", (req, res) => res.send("✅ Server attivo e pronto per /trascrivi"));
 
 app.post("/trascrivi", upload.single("file"), async (req, res) => {
   console.log("⚡ [DEBUG] /trascrivi chiamato");
@@ -229,10 +244,7 @@ process.on("uncaughtException", err => console.error("💥 ERRORE NON GESTITO (E
 /*****************************************************************************************
  * 🔻 AVVIO SERVER
  *****************************************************************************************/
-app.listen(3000, () => console.log("✅ Server con email avviato su http://localhost:3000"));
-
-// 🚀 PRODUZIONE / AZURE APP SERVICE
-// const port = process.env.PORT || 3000;
-// app.listen(port, "0.0.0.0", () => {
-//   console.log(`✅ Server avviato su http://localhost:${port} (PORT=${port})`);
-// });
+const port = process.env.PORT || 3000;
+app.listen(port, "0.0.0.0", () => {
+  console.log(`✅ Server con email avviato su http://localhost:${port}`);
+});

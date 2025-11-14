@@ -28,3 +28,25 @@ button {
   max-height: 200px;
   overflow-y: auto;
 }
+
+/* 🎛️ Timer registrazione (PWA_Trascrizione) */
+#timerBox {
+  font-family: monospace;
+  margin-top: 6px;
+  font-weight: bold;
+  transition: color 0.3s;
+}
+
+.rec {
+  color: red;
+  animation: blink 1s infinite;
+}
+
+.done {
+  color: lime;
+  animation: none;
+}
+
+@keyframes blink {
+  50% { opacity: 0.4; }
+}

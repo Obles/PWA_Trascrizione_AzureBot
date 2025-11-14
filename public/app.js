@@ -1,10 +1,10 @@
 /*****************************************************************************************
  * 🎙️ PWA_Trascrizione – app.js
  *
- * 🔧 Versione migliorata:
- * - Il log viene cancellato solo quando si preme “Registra”
- * - Alla pressione di “Ferma” il log rimane visibile
- * - Compatibile con localhost:5500, 127.0.0.1:5500 e Azure
+ * 🔧 Versione finale:
+ * - Usa style.css per il timer lampeggiante
+ * - Log stabile (si cancella solo su “Start”)
+ * - Funziona su localhost, 127.0.0.1 e Azure
  *****************************************************************************************/
 
 console.log("✅ app.js caricato correttamente (" + window.location.origin + ")");
@@ -33,10 +33,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
 let mediaRecorder;
 let audioChunks = [];
+let timerInterval = null;
+let startTime = null;
 
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn   = document.getElementById("stopBtn");
 const result    = document.getElementById("result");
+
+// ⏱️ Timer sotto al log
+const timerBox = document.createElement("div");
+timerBox.id = "timerBox";
+timerBox.textContent = "";
+document.getElementById("debug-log").after(timerBox);
 
 recordBtn.onclick = async () => {
   // 🔄 Pulisce il log a ogni nuova registrazione
@@ -49,7 +57,6 @@ recordBtn.onclick = async () => {
   logToScreen("🎙️ Bottone Registra premuto");
 
   try {
-    // Ottiene il microfono
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logToScreen("✅ Accesso microfono ottenuto");
 
@@ -64,10 +71,28 @@ recordBtn.onclick = async () => {
     mediaRecorder.onstart = () => {
       logToScreen("▶️ Registrazione avviata");
       result.textContent = "🎙️ Registrazione in corso...";
+
+      // 🕒 Avvio timer lampeggiante
+      startTime = Date.now();
+      timerBox.className = "rec";
+      timerBox.textContent = "⏱️ 00:00 / registrazione in corso...";
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const min = String(Math.floor(elapsed / 60)).padStart(2, "0");
+        const sec = String(elapsed % 60).padStart(2, "0");
+        timerBox.textContent = `⏱️ ${min}:${sec} / registrazione in corso...`;
+      }, 1000);
     };
 
     mediaRecorder.onstop = async () => {
       logToScreen("⏹️ Registrazione fermata");
+
+      // ⏹️ Ferma timer e cambia colore
+      clearInterval(timerInterval);
+      timerInterval = null;
+      timerBox.className = "done";
+      timerBox.textContent = "✅ Registrazione completata";
+
       result.textContent = "⏳ Invio audio al server...";
 
       const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
