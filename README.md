@@ -39,7 +39,7 @@
     ├── serverMail.js      ← server Node.js con trascrizione + invio email
     ├── serverOld.js       ← versione precedente (solo trascrizione)
     │
-    ├── .env               ← credenziali OpenAI + Gmail (non va pubblicato!)
+    ├── .env               ← credenziali OpenAI + Gmail (non va pubblicato!) -> TUTTE LE VARIABILI
     ├── package.json       ← definizione dipendenze npm
     │
     └── /icons/            ← icone PWA per home screen / splash screen

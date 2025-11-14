@@ -1,4 +1,13 @@
-console.log("✅ app.js caricato correttamente");
+/*****************************************************************************************
+ * 🎙️ PWA_Trascrizione – app.js
+ *
+ * 🔧 Versione migliorata:
+ * - Il log viene cancellato solo quando si preme “Registra”
+ * - Alla pressione di “Ferma” il log rimane visibile
+ * - Compatibile con localhost:5500, 127.0.0.1:5500 e Azure
+ *****************************************************************************************/
+
+console.log("✅ app.js caricato correttamente (" + window.location.origin + ")");
 
 function logToScreen(message) {
   const box = document.getElementById("debug-log");
@@ -11,6 +20,17 @@ function logToScreen(message) {
   console.log(message);
 }
 
+// 🟢 Inizializzazione log all’avvio
+document.addEventListener("DOMContentLoaded", () => {
+  const box = document.getElementById("debug-log");
+  if (box) {
+    box.innerHTML = "<b style='color:lime'>Log in tempo reale:</b>";
+    console.log("🔧 Box log inizializzato correttamente");
+  } else {
+    console.warn("⚠️ Nessun elemento #debug-log trovato nel DOM");
+  }
+});
+
 let mediaRecorder;
 let audioChunks = [];
 
@@ -19,7 +39,15 @@ const stopBtn   = document.getElementById("stopBtn");
 const result    = document.getElementById("result");
 
 recordBtn.onclick = async () => {
+  // 🔄 Pulisce il log a ogni nuova registrazione
+  const box = document.getElementById("debug-log");
+  if (box) {
+    box.innerHTML = "<b style='color:lime'>Log in tempo reale:</b>";
+    logToScreen("🧹 Log precedente cancellato");
+  }
+
   logToScreen("🎙️ Bottone Registra premuto");
+
   try {
     // Ottiene il microfono
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -54,11 +82,21 @@ recordBtn.onclick = async () => {
 
       try {
         logToScreen("📤 Invio al server...");
-        //const resp = await fetch("http://localhost:3000/trascrivi", {
-        const resp = await fetch("/trascrivi", {
+
+        // 🔧 Rilevamento automatico ambiente (locale vs Azure)
+        const apiBase =
+          window.location.hostname.includes("127.0.0.1") ||
+          window.location.hostname.includes("localhost")
+            ? "http://localhost:3000"
+            : window.location.origin;
+
+        logToScreen("🌐 Endpoint API rilevato: " + apiBase + "/trascrivi");
+
+        const resp = await fetch(`${apiBase}/trascrivi`, {
           method: "POST",
           body: formData
         });
+
         const data = await resp.json();
         logToScreen("📩 Risposta server: " + JSON.stringify(data));
         result.textContent = "📝 Testo: " + (data.testo || "Errore o risposta vuota");
