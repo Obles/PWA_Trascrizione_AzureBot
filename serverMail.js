@@ -1,15 +1,15 @@
 /*****************************************************************************************
- * 🎙️ PWA_Trascrizione – serverMail.js (versione aggiornata per Office 365 Exchange)
- * 
- * 🔧 Fix definitivo:
- * - Gestione risposta vuota da OpenAI (rawText === "")
- * - Eliminati ritorni doppi e garantito sempre res.json()
- * - Debug completo di rete e conversione
+ * 🎙️ PWA_Trascrizione – serverMail.js
  *
- * 🔐 [SECURITY] Aggiornamento:
- * - Gestione doppio ambiente: locale (sviluppo) vs Azure (EasyAuth + Entra ID)
- * - Middleware requirePwaAccessGroup applicato alla route /trascrivi
- * - Route di debug /api/debug/auth per ispezionare i claims in Azure
+ * Funzioni principali:
+ * - Upload audio, conversione in MP3
+ * - Invio a OpenAI Whisper
+ * - Invio email (Microsoft Graph + SMTP fallback)
+ *
+ * Modalità ambiente (APP_ENV):
+ * - local       → sviluppo locale, nessuna autenticazione, mail attiva
+ * - azure_noauth → Azure senza autenticazione (FASE 1, test funzionali)
+ * - azure_auth  → Azure con EasyAuth + gruppi Entra (FASE 2, da attivare dopo)
  *****************************************************************************************/
 
 import express from "express";
@@ -22,6 +22,8 @@ import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
 import nodemailer from "nodemailer";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 ffmpeg.setFfmpegPath(ffmpegPath);
@@ -29,24 +31,25 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 const app = express();
 
 /* 🔐 [SECURITY] Configurazione ambiente applicativo
-   APP_ENV=local  → modalità sviluppo/debug locale (nessuna EasyAuth, utente simulato)
-   APP_ENV=azure  → modalità WebApp Azure (EasyAuth + Entra ID + gruppi)
+   APP_ENV=local        → modalità sviluppo/debug locale (nessuna EasyAuth, nessun controllo gruppi)
+   APP_ENV=azure_noauth → WebApp Azure senza autenticazione (FASE 1 test funzionali)
+   APP_ENV=azure_auth   → WebApp Azure con EasyAuth + Entra ID + gruppi (FASE 2)
 */
 const APP_ENV = process.env.APP_ENV || "local";
 console.log(`🔐 [SECURITY] Ambiente applicativo: APP_ENV=${APP_ENV}`);
 
 // ✅ Abilita CORS solo per ambiente locale (dev)
-app.use(
-  cors({
-    origin: ["http://127.0.0.1:5500", "http://localhost:5500"],
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+if (APP_ENV === "local") {
+  app.use(
+    cors({
+      origin: ["http://127.0.0.1:5500", "http://localhost:5500"],
+      methods: ["GET", "POST"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    })
+  );
+}
 
 // 🧭 Gestione percorsi e servizio dei file statici
-import path from "path";
-import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -62,14 +65,17 @@ app.use((req, res, next) => {
 
 /* ========================================================================================
    🔐 [SECURITY] BLOCCO SECURITY PWA_Trascrizione
-   - Gestione EasyAuth in Azure (X-MS-CLIENT-PRINCIPAL)
-   - Simulazione utente in locale per sviluppo e debug
+   - Modalità locale & azure_noauth: nessun blocco, pass-through
+   - Modalità azure_auth: usa EasyAuth (X-MS-CLIENT-PRINCIPAL) e gruppi Entra
    ======================================================================================== */
 
-// 🔐 [SECURITY] GUID del gruppo Entra autorizzato (PWA_Trascrizione_Access)
-const REQUIRED_GROUP = "03e6e95e-d8c2-4b4f-9506-7f87c2298935";
+// 🔐 Gruppo richiesto: in Azure lo fornisce la variabile EasyAuth WEBSITE_AUTH_AAD_ALLOWED_GROUPS
+const REQUIRED_GROUP =
+  process.env.WEBSITE_AUTH_AAD_ALLOWED_GROUPS || "LOCAL-REQUIRED-GROUP";
 
-// 🔐 [SECURITY] Lettura e decodifica header EasyAuth
+console.log("🔐 REQUIRED_GROUP =", REQUIRED_GROUP);
+
+// 🔐 Lettura e decodifica header EasyAuth
 function getClientPrincipal(req) {
   const header = req.headers["x-ms-client-principal"];
   if (!header) return null;
@@ -84,55 +90,87 @@ function getClientPrincipal(req) {
   }
 }
 
-// 🔐 [SECURITY] Middleware di autorizzazione dual-mode (locale / Azure)
+// 🔐 Middleware di autorizzazione tri-mode (local / azure_noauth / azure_auth)
 function requirePwaAccessGroup(req, res, next) {
-  // 1️⃣ Modalità locale: nessuna EasyAuth, utente simulato per debug
+  /* 1️⃣ Modalità LOCALE: nessuna EasyAuth, nessun controllo gruppi */
   if (APP_ENV === "local") {
     req.user = {
       name: process.env.DEV_USER_NAME || "Dev User",
       email: process.env.DEV_USER_EMAIL || "dev@example.com",
-      groups: ["LOCAL-DEVELOPER"],
+      groups: [REQUIRED_GROUP], // simulazione gruppo valido
+      mode: "local",
     };
     return next();
   }
 
-  // 2️⃣ Modalità Azure: uso EasyAuth + gruppi Entra
-  const principal = getClientPrincipal(req);
-
-  if (!principal) {
-    return res
-      .status(401)
-      .send("Utente non autenticato (manca X-MS-CLIENT-PRINCIPAL in Azure)");
+  /* 2️⃣ Modalità AZURE SENZA AUTH: FASE 1, test funzionali senza login */
+  if (APP_ENV === "azure_noauth") {
+    req.user = {
+      name: "Azure Test (no auth)",
+      email: null,
+      groups: [],
+      mode: "azure_noauth",
+    };
+    return next();
   }
 
-  const claims = principal.claims || [];
+  /* 3️⃣ Modalità AZURE CON AUTH (EasyAuth + gruppi Entra) */
+  if (APP_ENV === "azure_auth") {
+    const principal = getClientPrincipal(req);
 
-  const groups = claims
-    .filter((c) => c.typ === "groups")
-    .map((c) => c.val);
+    if (!principal) {
+      return res
+        .status(401)
+        .json({ error: "Utente non autenticato (manca X-MS-CLIENT-PRINCIPAL)" });
+    }
 
-  if (!groups.includes(REQUIRED_GROUP)) {
-    return res
-      .status(403)
-      .send("Accesso negato: utente non appartiene al gruppo autorizzato");
+    const claims = principal.claims || [];
+    if (!claims.length) {
+      return res.status(401).json({
+        error: "Principal senza claims (propagazione Entra non completata)",
+      });
+    }
+
+    const groups = claims
+      .filter((c) => c.typ === "groups")
+      .map((c) => c.val);
+
+    if (!groups.includes(REQUIRED_GROUP)) {
+      return res.status(403).json({
+        error: "Accesso negato: utente non appartiene al gruppo autorizzato",
+        receivedGroups: groups,
+      });
+    }
+
+    const nameClaim = claims.find((c) => c.typ === "name");
+    const emailClaim =
+      claims.find((c) => c.typ === "preferred_username") ||
+      claims.find((c) => c.typ === "emails");
+
+    req.user = {
+      name: nameClaim ? nameClaim.val : null,
+      email: emailClaim ? emailClaim.val : null,
+      groups,
+      mode: "azure_auth",
+    };
+
+    return next();
   }
 
-  const emailClaim =
-    claims.find((c) => c.typ === "preferred_username") ||
-    claims.find((c) => c.typ === "emails");
-
-  const nameClaim = claims.find((c) => c.typ === "name");
-
+  // Modalità sconosciuta → comportarsi in modo conservativo (come locale ma con warning)
+  console.warn(
+    `⚠️ APP_ENV non riconosciuto (${APP_ENV}), applico comportamento "local-like".`
+  );
   req.user = {
-    name: nameClaim ? nameClaim.val : null,
-    email: emailClaim ? emailClaim.val : null,
-    groups,
+    name: process.env.DEV_USER_NAME || "Dev User",
+    email: process.env.DEV_USER_EMAIL || "dev@example.com",
+    groups: [REQUIRED_GROUP],
+    mode: "fallback",
   };
-
-  next();
+  return next();
 }
 
-// 🔐 [SECURITY] Route di debug per verificare i claims (Azure / locale)
+// 🔐 Route di debug per verificare i claims (Azure / locale)
 app.get("/api/debug/auth", (req, res) => {
   if (APP_ENV === "local") {
     return res.json({
@@ -140,7 +178,18 @@ app.get("/api/debug/auth", (req, res) => {
       user: {
         name: process.env.DEV_USER_NAME || "Dev User",
         email: process.env.DEV_USER_EMAIL || "dev@example.com",
-        groups: ["LOCAL-DEVELOPER"],
+        groups: [REQUIRED_GROUP],
+      },
+    });
+  }
+
+  if (APP_ENV === "azure_noauth") {
+    return res.json({
+      mode: "AZURE NO AUTH",
+      user: {
+        name: "Azure Test (no auth)",
+        email: null,
+        groups: [],
       },
     });
   }
@@ -161,6 +210,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 /* ========================================================================================
    🔹 BLOCCO EMAIL (Graph + SMTP Exchange)
    ======================================================================================== */
+
 const M365_TENANT_ID = process.env.M365_TENANT_ID;
 const M365_CLIENT_ID = process.env.M365_CLIENT_ID;
 const M365_CLIENT_SECRET = process.env.M365_CLIENT_SECRET;
@@ -251,17 +301,19 @@ smtpTransporter.verify((err) =>
    🔹 ENDPOINT PRINCIPALE
    ======================================================================================== */
 
-// 🔐 [SECURITY] Qui è stata aggiunta requirePwaAccessGroup come middleware
+// 🔐 [SECURITY] Qui è applicato requirePwaAccessGroup
 app.post(
   "/trascrivi",
-  requirePwaAccessGroup, // 🔐 [SECURITY] Protezione dual-mode (locale / Azure)
+  requirePwaAccessGroup, // Protezione in base a APP_ENV
   upload.single("file"),
   async (req, res) => {
     console.log("⚡ [DEBUG] /trascrivi chiamato");
     res.on("finish", () =>
       console.log("⚡ [DEBUG] Risposta HTTP completata")
     );
-    res.on("close", () => console.log("⚡ [DEBUG] Connessione chiusa dal client"));
+    res.on("close", () =>
+      console.log("⚡ [DEBUG] Connessione chiusa dal client")
+    );
 
     if (!req.file)
       return res.status(400).json({ testo: "❌ Nessun file ricevuto" });
@@ -393,9 +445,10 @@ process.on("uncaughtException", (err) =>
 /*****************************************************************************************
  * 🔻 AVVIO SERVER
  *****************************************************************************************/
+
 const port = process.env.PORT || 3000;
 
-// Necessario per EasyAuth
+// Route callback EasyAuth (innocua anche se EasyAuth è disattivato)
 app.get("/.auth/login/aad/callback", (req, res) => {
   res.redirect("/");
 });
@@ -405,12 +458,12 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Catch-all (solo dopo)
-app.get("*", (req, res) => {
+// Catch-all SOLO per le route non API e non /trascrivi
+app.get(/^\/(?!api|trascrivi).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-
+// Start server
 app.listen(port, "0.0.0.0", () => {
   console.log(
     `✅ Server con email avviato su http://localhost:${port} (APP_ENV=${APP_ENV})`
