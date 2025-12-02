@@ -393,13 +393,13 @@ app.post(
       ];
 
       try {
-        await sendMailGraph(process.env.SMTP_TO, subject, testo, attachments);
+        await sendMailGraph(req.user.email, subject, testo, attachments);
       } catch (graphErr) {
         console.warn("⚠️ Invio via Graph fallito:", graphErr.message);
         try {
           await smtpTransporter.sendMail({
             from: `"Trascrizione Vocale" <${process.env.SMTP_USER}>`,
-            to: process.env.SMTP_TO,
+            to: req.user.email, 
             subject,
             text: testo,
             attachments,
