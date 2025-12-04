@@ -12,6 +12,22 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div class="header-container">
+    <div class="user-menu" id="userMenu">
+        <img src="/icons/avatar.jpg" class="user-avatar" id="userAvatar">
+
+        <div class="dropdown-menu" id="userDropdown">
+            <div class="user-info">
+                <div id="userName" style="font-weight:bold;">Utente</div>
+                <div id="userEmail" style="font-size:13px;color:#444;">email@example.com</div>
+            </div>
+
+            <div class="dropdown-item" onclick="window.location.href='/.auth/logout'">
+                Sign Out
+            </div>
+        </div>
+    </div>
+</div>
   <h2>🎙️ Trascrizione Vocale</h2>
 
   <button id="recordBtn">🎙️ Registra</button>

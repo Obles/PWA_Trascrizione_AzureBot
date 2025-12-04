@@ -9,6 +9,83 @@
 
 console.log("✅ app.js caricato correttamente (" + window.location.origin + ")");
 
+// 📜 Funzione di log off su schermo e console
+document.addEventListener("DOMContentLoaded", () => {
+
+    const userMenu = document.getElementById("userMenu");
+    const dropdown = document.getElementById("userDropdown");
+
+    userMenu.addEventListener("click", () => {
+        dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+    });
+
+    async function loadUserInfo() {
+        try {
+            const res = await fetch("/.auth/me");
+            const data = await res.json();
+            const claims = data[0].user_claims;
+
+            const name = claims.find(c => c.typ === "name")?.val ?? "Utente";
+            const email = claims.find(c => c.typ === "preferred_username")?.val ?? "N/A";
+
+            document.getElementById("userName").innerText = name;
+            document.getElementById("userEmail").innerText = email;
+
+            document.getElementById("userAvatar").src = "/icons/avatar.jpg";
+
+        } catch (e) {
+            console.error("Errore caricamento user info:", e);
+        }
+    }
+
+async function loadMicrosoftAvatar() {
+    try {
+        const resp = await fetch("/.auth/me");
+        const data = await resp.json();
+
+        const token = data[0]?.access_token;
+
+        if (!token) {
+            // Nessun token (tenant Azure senza M365) → avatar default
+            document.getElementById("userAvatar").src = "/icons/avatar.jpg";
+            return;
+        }
+
+        // Prova a recuperare la foto da Graph
+        const photoResp = await fetch("https://graph.microsoft.com/v1.0/me/photo/$value", {
+            headers: {
+                "Authorization": "Bearer " + token
+            }
+        });
+
+        if (photoResp.ok) {
+            const blob = await photoResp.blob();
+            const url = URL.createObjectURL(blob);
+            document.getElementById("userAvatar").src = url;
+        } else {
+            // Foto non disponibile → avatar locale
+            document.getElementById("userAvatar").src = "/icons/avatar.jpg";
+        }
+
+    } catch (err) {
+        // Qualsiasi errore → fallback silenzioso
+        document.getElementById("userAvatar").src = "/icons/avatar.jpg";
+    }
+}
+    
+    loadUserInfo();
+    loadMicrosoftAvatar(); 
+
+    document.addEventListener("click", (event) => {
+        if (!userMenu.contains(event.target)) {
+            dropdown.style.display = "none";
+        }
+    });
+
+});
+
+////////////////////////////////////////////////////////////////////////////////
+
 function logToScreen(message) {
   const box = document.getElementById("debug-log");
   if (box) {
@@ -39,6 +116,7 @@ let startTime = null;
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn   = document.getElementById("stopBtn");
 const result    = document.getElementById("result");
+
 
 // ⏱️ Timer sotto al log
 const timerBox = document.createElement("div");
