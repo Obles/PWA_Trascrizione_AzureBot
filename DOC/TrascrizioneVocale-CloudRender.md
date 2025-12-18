@@ -182,3 +182,8 @@ http://<tuo_IP_locale>:3000
 ## 📌 Titolo interno richiamabile
 **`TrascrizioneVocale-CloudRender`**  
 > PWA multipiattaforma con backend Node.js e invio email integrato – versione cloud Render.
+
+# az login
+## az login --use-device-code
+
+az login --tenant 841d1384-c9f8-4de3-ba9d-b813f8dbaf4a
